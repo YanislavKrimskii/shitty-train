@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Практическая 7 — AR на A-Frame + MindAR</title>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    a-scene {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .hint {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      z-index: 10;
+      font-size: 14px;
+    }
+
+    .controls {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 8px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
+    .controls button {
+      padding: 6px 10px;
+      border-radius: 4px;
+      border: none;
+      background: #ffffffdd;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .controls button:active {
+      transform: scale(0.95);
+    }
+  </style>
+</head>
+<body>
+  <div class="hint">
+    Наведите камеру на маркер.
+  </div>
+
+  <div class="controls">
+    <button id="btn-bigger">Увеличить</button>
+    <button id="btn-smaller">Уменьшить</button>
+    <button id="btn-rotate">Повернуть</button>
+    <button id="btn-toggle">Скрыть/показать</button>
+    <button id="btn-reset">Сбросить</button>
+    <button id="btn-switch">Сменить модель</button>
+  </div>
+
+  <a-scene
+      mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiLoading: yes; uiScanning: yes; uiError: yes"
+      vr-mode-ui="enabled: false"
+      device-orientation-permission-ui="enabled: true"
+      renderer="colorManagement: true, physicallyCorrectLights: true"
+      embedded>
+
+    <a-assets>
+      <a-asset-item id="model-asset-1" src="./models/model1.glb"></a-asset-item>
+      <a-asset-item id="model-asset-2" src="./models/model2.glb"></a-asset-item>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+    <a-entity light="type: directional; intensity: 0.9" position="1 2 0"></a-entity>
+
+    <a-entity mindar-image-target="targetIndex: 0" id="marker-root">
+      <a-entity
+          id="model1"
+          class="clickable"
+          gltf-model="#model-asset-1"
+          position="0 0 0"
+          rotation="0 0 0"
+          scale="0.3 0.3 0.3"
+          shadow="cast: true; receive: true">
+      </a-entity>
+
+      <a-entity
+          id="model2"
+          class="clickable"
+          gltf-model="#model-asset-2"
+          position="0 0 0"
+          rotation="0 0 0"
+          scale="0.3 0.3 0.3"
+          visible="false"
+          shadow="cast: true; receive: true">
+      </a-entity>
+
+      <a-ring
+          id="highlight-ring"
+          position="0 -0.01 0"
+          rotation="-90 0 0"
+          radius-inner="0.4"
+          radius-outer="0.45"
+          color="#00ff00"
+          material="opacity: 0.4"
+          visible="false">
+      </a-ring>
+
+      <a-entity id="cursor"
+                cursor="rayOrigin: mouse"
+                raycaster="objects: .clickable">
+      </a-entity>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const model1 = document.querySelector("#model1");
+      const model2 = document.querySelector("#model2");
+      const models = [model1, model2];
+      let currentModelIndex = 0;
+      let activeModel = models[currentModelIndex];
+
+      const markerRoot = document.querySelector("#marker-root");
+      const highlightRing = document.querySelector("#highlight-ring");
+
+      const btnBigger  = document.querySelector("#btn-bigger");
+      const btnSmaller = document.querySelector("#btn-smaller");
+      const btnRotate  = document.querySelector("#btn-rotate");
+      const btnToggle  = document.querySelector("#btn-toggle");
+      const btnReset   = document.querySelector("#btn-reset");
+      const btnSwitch  = document.querySelector("#btn-switch");
+
+      const MIN_SCALE = 0.05;
+      const MAX_SCALE = 3.0;
+
+      const INITIAL_STATE = {
+        position: { x: 0, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale:    { x: 0.3, y: 0.3, z: 0.3 }
+      };
+
+      let isInteracting = false;
+
+      function clampScale(scaleObj) {
+        const clamp = v => Math.max(MIN_SCALE, Math.min(MAX_SCALE, v));
+        return {
+          x: clamp(scaleObj.x),
+          y: clamp(scaleObj.y),
+          z: clamp(scaleObj.z)
+        };
+      }
+
+      function updateRingTransform() {
+        const pos = activeModel.getAttribute("position") || {x: 0, y: 0, z: 0};
+        const scale = activeModel.getAttribute("scale") || {x: 1, y: 1, z: 1};
+        const avgScale = (scale.x + scale.y + scale.z) / 3;
+
+        highlightRing.setAttribute("position", {
+          x: pos.x,
+          y: pos.y - 0.01,
+          z: pos.z
+        });
+
+        highlightRing.setAttribute("scale", {
+          x: avgScale,
+          y: avgScale,
+          z: avgScale
+        });
+      }
+
+      function startInteraction() {
+        isInteracting = true;
+        updateRingTransform();
+        highlightRing.setAttribute("visible", true);
+      }
+
+      function endInteraction() {
+        isInteracting = false;
+        highlightRing.setAttribute("visible", false);
+      }
+
+      function resetActiveModel() {
+        activeModel.setAttribute("position", INITIAL_STATE.position);
+        activeModel.setAttribute("rotation", INITIAL_STATE.rotation);
+        activeModel.setAttribute("scale",    INITIAL_STATE.scale);
+        activeModel.setAttribute("visible", true);
+        if (isInteracting) updateRingTransform();
+      }
+
+      function changeScale(mult) {
+        const s = activeModel.getAttribute("scale");
+        let newScale = {
+          x: s.x * mult,
+          y: s.y * mult,
+          z: s.z * mult
+        };
+        newScale = clampScale(newScale);
+        activeModel.setAttribute("scale", newScale);
+        if (isInteracting) updateRingTransform();
+      }
+
+      function switchModel() {
+        models[currentModelIndex].setAttribute("visible", false);
+
+        currentModelIndex = (currentModelIndex + 1) % models.length;
+        activeModel = models[currentModelIndex];
+
+        activeModel.setAttribute("visible", true);
+        activeModel.setAttribute("position", INITIAL_STATE.position);
+        activeModel.setAttribute("rotation", INITIAL_STATE.rotation);
+        activeModel.setAttribute("scale",    INITIAL_STATE.scale);
+
+        endInteraction();
+      }
+
+      btnBigger.addEventListener("click", () => changeScale(1.2));
+      btnSmaller.addEventListener("click", () => changeScale(0.8));
+
+      btnRotate.addEventListener("click", () => {
+        const r = activeModel.getAttribute("rotation");
+        activeModel.setAttribute("rotation", {
+          x: r.x,
+          y: r.y + 15,
+          z: r.z
+        });
+        if (isInteracting) updateRingTransform();
+      });
+
+      btnToggle.addEventListener("click", () => {
+        const visible = activeModel.getAttribute("visible");
+        activeModel.setAttribute("visible", !visible);
+        if (!visible && isInteracting) {
+          updateRingTransform();
+        }
+        if (visible) {
+          endInteraction();
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        resetActiveModel();
+      });
+
+      btnSwitch.addEventListener("click", () => {
+        switchModel();
+      });
+
+      let dragging = false;
+      let lastTouch = null;
+
+      let initialPinchDistance = null;
+      let initialScale = null;
+
+      window.addEventListener("touchstart", (e) => {
+        if (e.target.tagName && e.target.tagName.toLowerCase() === "button") return;
+
+        if (e.touches.length >= 1) {
+          startInteraction();
+        }
+
+        if (e.touches.length === 1) {
+          dragging = true;
+          lastTouch = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY
+          };
+        }
+      }, {passive: true});
+
+      window.addEventListener("touchend", (e) => {
+        if (e.touches.length === 0) {
+          dragging = false;
+          lastTouch = null;
+          initialPinchDistance = null;
+          initialScale = null;
+          endInteraction();
+        }
+      });
+
+      window.addEventListener("touchmove", (e) => {
+        if (e.touches.length === 1 && dragging) {
+          const touch = e.touches[0];
+          const dx = touch.clientX - lastTouch.x;
+          const dy = touch.clientY - lastTouch.y;
+
+          const factor = 800;
+
+          const pos = activeModel.getAttribute("position");
+          activeModel.setAttribute("position", {
+            x: pos.x + dx / factor,
+            y: pos.y - dy / factor,
+            z: pos.z
+          });
+
+          lastTouch = {
+            x: touch.clientX,
+            y: touch.clientY
+          };
+
+          if (isInteracting) updateRingTransform();
+        }
+
+        if (e.touches.length === 2) {
+          const t1 = e.touches[0];
+          const t2 = e.touches[1];
+          const dx = t1.clientX - t2.clientX;
+          const dy = t1.clientY - t2.clientY;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (!initialPinchDistance) {
+            initialPinchDistance = dist;
+            initialScale = activeModel.getAttribute("scale");
+          } else {
+            const scaleFactor = dist / initialPinchDistance;
+            let newScale = {
+              x: initialScale.x * scaleFactor,
+              y: initialScale.y * scaleFactor,
+              z: initialScale.z * scaleFactor
+            };
+            newScale = clampScale(newScale);
+            activeModel.setAttribute("scale", newScale);
+            if (isInteracting) updateRingTransform();
+          }
+        }
+      }, {passive: true});
+
+      window.addEventListener("mousedown", (e) => {
+        if (e.target.tagName && e.target.tagName.toLowerCase() === "button") return;
+        startInteraction();
+      });
+
+      window.addEventListener("mouseup", () => {
+        endInteraction();
+      });
+
+      markerRoot.addEventListener("targetFound", () => {
+        console.log("Маркер найден");
+      });
+
+      markerRoot.addEventListener("targetLost", () => {
+        console.log("Маркер потерян");
+      });
+    });
+  </script>
+</body>
+</html>

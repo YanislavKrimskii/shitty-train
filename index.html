@@ -2,10 +2,14 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>AR на A-Frame + MindAR</title>
+  <title>Практическая 7 — AR на A-Frame + MindAR</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <!-- Добавляем компонент для анимации GLB -->
+  <script src="https://unpkg.com/aframe-animation-component@5.1.2/dist/aframe-animation-component.min.js"></script>
+  <!-- Или используем animation-mixer (лучше для GLB) -->
+  <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 
   <style>
     html, body {
@@ -95,6 +99,14 @@
     #btn-toggle:hover {
       background: linear-gradient(to bottom, #ab69c6, #9b59b6);
     }
+    
+    #btn-animation {
+      background: linear-gradient(to bottom, #2ecc71, #27ae60);
+    }
+    
+    #btn-animation:hover {
+      background: linear-gradient(to bottom, #3eec81, #37ce70);
+    }
   </style>
 </head>
 <body>
@@ -108,6 +120,7 @@
     <button id="btn-rotate">Повернуть</button>
     <button id="btn-toggle">Скрыть/показать</button>
     <button id="btn-reset">Сбросить</button>
+    <button id="btn-animation">Анимация</button>
   </div>
 
   <a-scene
@@ -135,7 +148,8 @@
           position="0 0 0"
           rotation="0 0 0"
           scale="0.3 0.3 0.3"
-          shadow="cast: true; receive: true">
+          shadow="cast: true; receive: true"
+          animation-mixer="clip: *; loop: repeat; timeScale: 1">
       </a-entity>
 
       <a-ring
@@ -168,6 +182,7 @@
       const btnRotate  = document.querySelector("#btn-rotate");
       const btnToggle  = document.querySelector("#btn-toggle");
       const btnReset   = document.querySelector("#btn-reset");
+      const btnAnimation = document.querySelector("#btn-animation");
 
       const MIN_SCALE = 0.05;
       const MAX_SCALE = 3.0;
@@ -179,6 +194,7 @@
       };
 
       let isInteracting = false;
+      let isAnimating = true; // По умолчанию анимация включена
 
       function clampScale(scaleObj) {
         const clamp = v => Math.max(MIN_SCALE, Math.min(MAX_SCALE, v));
@@ -238,6 +254,30 @@
         if (isInteracting) updateRingTransform();
       }
 
+      function toggleAnimation() {
+        isAnimating = !isAnimating;
+        
+        if (isAnimating) {
+          // Включаем анимацию
+          model.setAttribute("animation-mixer", {
+            clip: "*",
+            loop: "repeat",
+            timeScale: 1
+          });
+          btnAnimation.textContent = "Стоп анимация";
+          btnAnimation.style.background = "linear-gradient(to bottom, #2ecc71, #27ae60)";
+        } else {
+          // Выключаем анимацию
+          model.setAttribute("animation-mixer", {
+            clip: "*",
+            loop: "repeat",
+            timeScale: 0  // Установка timeScale в 0 останавливает анимацию
+          });
+          btnAnimation.textContent = "Анимация";
+          btnAnimation.style.background = "linear-gradient(to bottom, #e74c3c, #c0392b)";
+        }
+      }
+
       btnBigger.addEventListener("click", () => changeScale(1.2));
       btnSmaller.addEventListener("click", () => changeScale(0.8));
 
@@ -264,6 +304,10 @@
 
       btnReset.addEventListener("click", () => {
         resetModel();
+      });
+
+      btnAnimation.addEventListener("click", () => {
+        toggleAnimation();
       });
 
       let dragging = false;
@@ -361,10 +405,25 @@
           appearSound.currentTime = 0;
           appearSound.play().catch(e => console.log("Не удалось воспроизвести звук:", e));
         }
+        
+        // Автоматически включаем анимацию при появлении модели
+        if (isAnimating) {
+          model.setAttribute("animation-mixer", {
+            clip: "*",
+            loop: "repeat",
+            timeScale: 1
+          });
+        }
       });
 
       markerRoot.addEventListener("targetLost", () => {
         console.log("Маркер потерян");
+        // Останавливаем анимацию при потере маркера
+        model.setAttribute("animation-mixer", {
+          clip: "*",
+          loop: "repeat",
+          timeScale: 0
+        });
       });
     });
   </script>

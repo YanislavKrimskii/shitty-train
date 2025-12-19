@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Практическая 7 — AR на A-Frame + MindAR</title>
+  <title>AR на A-Frame + MindAR</title>
 
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
@@ -13,7 +13,7 @@
       padding: 0;
       height: 100%;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     a-scene {
@@ -29,12 +29,15 @@
       top: 0;
       left: 0;
       right: 0;
-      padding: 10px;
+      padding: 12px;
       text-align: center;
-      background: rgba(0, 0, 0, 0.6);
+      background: linear-gradient(to right, #2c3e50, #3498db);
       color: #fff;
       z-index: 10;
-      font-size: 14px;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
     }
 
     .controls {
@@ -42,32 +45,61 @@
       bottom: 0;
       left: 0;
       right: 0;
-      padding: 8px;
+      padding: 12px;
       display: flex;
       justify-content: center;
       flex-wrap: wrap;
-      gap: 6px;
-      background: rgba(0, 0, 0, 0.5);
+      gap: 8px;
+      background: rgba(25, 25, 35, 0.85);
+      backdrop-filter: blur(5px);
       z-index: 10;
+      border-top: 1px solid rgba(255,255,255,0.1);
     }
 
     .controls button {
-      padding: 6px 10px;
-      border-radius: 4px;
+      padding: 8px 14px;
+      border-radius: 6px;
       border: none;
-      background: #ffffffdd;
-      font-size: 12px;
+      background: linear-gradient(to bottom, #4a6fa5, #3a5a8a);
+      color: white;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
+      transition: all 0.2s;
+      min-width: 90px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .controls button:hover {
+      background: linear-gradient(to bottom, #5a7fb5, #4a6a9a);
+      transform: translateY(-1px);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.25);
     }
 
     .controls button:active {
-      transform: scale(0.95);
+      transform: scale(0.97);
+    }
+
+    #btn-reset {
+      background: linear-gradient(to bottom, #e74c3c, #c0392b);
+    }
+
+    #btn-reset:hover {
+      background: linear-gradient(to bottom, #ff5a4a, #e74c3c);
+    }
+
+    #btn-toggle {
+      background: linear-gradient(to bottom, #9b59b6, #8e44ad);
+    }
+
+    #btn-toggle:hover {
+      background: linear-gradient(to bottom, #ab69c6, #9b59b6);
     }
   </style>
 </head>
 <body>
   <div class="hint">
-    Наведите камеру на маркер.
+    🔍 Наведите камеру на маркер, чтобы увидеть 3D-модель
   </div>
 
   <div class="controls">
@@ -76,7 +108,6 @@
     <button id="btn-rotate">Повернуть</button>
     <button id="btn-toggle">Скрыть/показать</button>
     <button id="btn-reset">Сбросить</button>
-    <button id="btn-switch">Сменить модель</button>
   </div>
 
   <a-scene
@@ -87,8 +118,8 @@
       embedded>
 
     <a-assets>
-      <a-asset-item id="model-asset-1" src="./models/model1.glb"></a-asset-item>
-      <a-asset-item id="model-asset-2" src="./models/model2.glb"></a-asset-item>
+      <a-asset-item id="model-asset" src="./models/model1.glb"></a-asset-item>
+      <audio id="appear-sound" src="./sounds/appear.mp3" preload="auto"></audio>
     </a-assets>
 
     <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -98,23 +129,12 @@
 
     <a-entity mindar-image-target="targetIndex: 0" id="marker-root">
       <a-entity
-          id="model1"
+          id="model"
           class="clickable"
-          gltf-model="#model-asset-1"
+          gltf-model="#model-asset"
           position="0 0 0"
           rotation="0 0 0"
           scale="0.3 0.3 0.3"
-          shadow="cast: true; receive: true">
-      </a-entity>
-
-      <a-entity
-          id="model2"
-          class="clickable"
-          gltf-model="#model-asset-2"
-          position="0 0 0"
-          rotation="0 0 0"
-          scale="0.3 0.3 0.3"
-          visible="false"
           shadow="cast: true; receive: true">
       </a-entity>
 
@@ -124,8 +144,8 @@
           rotation="-90 0 0"
           radius-inner="0.4"
           radius-outer="0.45"
-          color="#00ff00"
-          material="opacity: 0.4"
+          color="#00ffaa"
+          material="opacity: 0.5"
           visible="false">
       </a-ring>
 
@@ -138,21 +158,16 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      const model1 = document.querySelector("#model1");
-      const model2 = document.querySelector("#model2");
-      const models = [model1, model2];
-      let currentModelIndex = 0;
-      let activeModel = models[currentModelIndex];
-
+      const model = document.querySelector("#model");
       const markerRoot = document.querySelector("#marker-root");
       const highlightRing = document.querySelector("#highlight-ring");
+      const appearSound = document.querySelector("#appear-sound");
 
       const btnBigger  = document.querySelector("#btn-bigger");
       const btnSmaller = document.querySelector("#btn-smaller");
       const btnRotate  = document.querySelector("#btn-rotate");
       const btnToggle  = document.querySelector("#btn-toggle");
       const btnReset   = document.querySelector("#btn-reset");
-      const btnSwitch  = document.querySelector("#btn-switch");
 
       const MIN_SCALE = 0.05;
       const MAX_SCALE = 3.0;
@@ -175,8 +190,8 @@
       }
 
       function updateRingTransform() {
-        const pos = activeModel.getAttribute("position") || {x: 0, y: 0, z: 0};
-        const scale = activeModel.getAttribute("scale") || {x: 1, y: 1, z: 1};
+        const pos = model.getAttribute("position") || {x: 0, y: 0, z: 0};
+        const scale = model.getAttribute("scale") || {x: 1, y: 1, z: 1};
         const avgScale = (scale.x + scale.y + scale.z) / 3;
 
         highlightRing.setAttribute("position", {
@@ -203,46 +218,32 @@
         highlightRing.setAttribute("visible", false);
       }
 
-      function resetActiveModel() {
-        activeModel.setAttribute("position", INITIAL_STATE.position);
-        activeModel.setAttribute("rotation", INITIAL_STATE.rotation);
-        activeModel.setAttribute("scale",    INITIAL_STATE.scale);
-        activeModel.setAttribute("visible", true);
+      function resetModel() {
+        model.setAttribute("position", INITIAL_STATE.position);
+        model.setAttribute("rotation", INITIAL_STATE.rotation);
+        model.setAttribute("scale",    INITIAL_STATE.scale);
+        model.setAttribute("visible", true);
         if (isInteracting) updateRingTransform();
       }
 
       function changeScale(mult) {
-        const s = activeModel.getAttribute("scale");
+        const s = model.getAttribute("scale");
         let newScale = {
           x: s.x * mult,
           y: s.y * mult,
           z: s.z * mult
         };
         newScale = clampScale(newScale);
-        activeModel.setAttribute("scale", newScale);
+        model.setAttribute("scale", newScale);
         if (isInteracting) updateRingTransform();
-      }
-
-      function switchModel() {
-        models[currentModelIndex].setAttribute("visible", false);
-
-        currentModelIndex = (currentModelIndex + 1) % models.length;
-        activeModel = models[currentModelIndex];
-
-        activeModel.setAttribute("visible", true);
-        activeModel.setAttribute("position", INITIAL_STATE.position);
-        activeModel.setAttribute("rotation", INITIAL_STATE.rotation);
-        activeModel.setAttribute("scale",    INITIAL_STATE.scale);
-
-        endInteraction();
       }
 
       btnBigger.addEventListener("click", () => changeScale(1.2));
       btnSmaller.addEventListener("click", () => changeScale(0.8));
 
       btnRotate.addEventListener("click", () => {
-        const r = activeModel.getAttribute("rotation");
-        activeModel.setAttribute("rotation", {
+        const r = model.getAttribute("rotation");
+        model.setAttribute("rotation", {
           x: r.x,
           y: r.y + 15,
           z: r.z
@@ -251,8 +252,8 @@
       });
 
       btnToggle.addEventListener("click", () => {
-        const visible = activeModel.getAttribute("visible");
-        activeModel.setAttribute("visible", !visible);
+        const visible = model.getAttribute("visible");
+        model.setAttribute("visible", !visible);
         if (!visible && isInteracting) {
           updateRingTransform();
         }
@@ -262,11 +263,7 @@
       });
 
       btnReset.addEventListener("click", () => {
-        resetActiveModel();
-      });
-
-      btnSwitch.addEventListener("click", () => {
-        switchModel();
+        resetModel();
       });
 
       let dragging = false;
@@ -309,8 +306,8 @@
 
           const factor = 800;
 
-          const pos = activeModel.getAttribute("position");
-          activeModel.setAttribute("position", {
+          const pos = model.getAttribute("position");
+          model.setAttribute("position", {
             x: pos.x + dx / factor,
             y: pos.y - dy / factor,
             z: pos.z
@@ -333,7 +330,7 @@
 
           if (!initialPinchDistance) {
             initialPinchDistance = dist;
-            initialScale = activeModel.getAttribute("scale");
+            initialScale = model.getAttribute("scale");
           } else {
             const scaleFactor = dist / initialPinchDistance;
             let newScale = {
@@ -342,7 +339,7 @@
               z: initialScale.z * scaleFactor
             };
             newScale = clampScale(newScale);
-            activeModel.setAttribute("scale", newScale);
+            model.setAttribute("scale", newScale);
             if (isInteracting) updateRingTransform();
           }
         }
@@ -359,6 +356,11 @@
 
       markerRoot.addEventListener("targetFound", () => {
         console.log("Маркер найден");
+        // Проигрываем звук при появлении модели
+        if (appearSound) {
+          appearSound.currentTime = 0;
+          appearSound.play().catch(e => console.log("Не удалось воспроизвести звук:", e));
+        }
       });
 
       markerRoot.addEventListener("targetLost", () => {
